@@ -118,7 +118,18 @@ contract DSCEngine is ReentrancyGuard {
         if (!success) revert DSCEngine__TransferFailed();
     }
 
-    function redeemCollateralForDsc() external {}
+    /**
+     * @notice This function will redeem your collateral and burn DSC in one transaction
+     * @param tokenCollateralAddress  The address of the collateral token to redeem
+     * @param amountCollateral  The amount of collateral to redeem
+     * @param amountDscToBurn  The amount of DSC to burn
+     */
+    function redeemCollateralForDsc(address tokenCollateralAddress, uint256 amountCollateral, uint256 amountDscToBurn)
+        external
+    {
+        burnDsc(amountDscToBurn);
+        redeemCollateral(tokenCollateralAddress, amountCollateral);
+    }
 
     /**
      * @notice In order to redeem collateral, health factor must be above 1
@@ -127,7 +138,7 @@ contract DSCEngine is ReentrancyGuard {
      * @param amountCollateral  The amount of collateral to redeem
      */
     function redeemCollateral(address tokenCollateralAddress, uint256 amountCollateral)
-        external
+        public
         moreThanZero(amountCollateral)
         nonReentrant
     {
@@ -151,7 +162,13 @@ contract DSCEngine is ReentrancyGuard {
         if (!minted) revert DSCEngine__MintFailed();
     }
 
-    function burnDsc() external {}
+    function burnDsc(uint256 amount) public moreThanZero(amount) {
+        s_DSCMinted[msg.sender] -= amount;
+        bool success = i_dsc.transferFrom(msg.sender, address(this), amount);
+        if (!success) revert DSCEngine__TransferFailed();
+        i_dsc.burn(amount);
+        _revertIfHealthFactorIsBroken(msg.sender); // Not sure if this is needed
+    }
 
     function liquidate() external {}
 
