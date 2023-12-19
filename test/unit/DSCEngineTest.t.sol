@@ -15,6 +15,7 @@ contract DSCEngineTest is Test {
     HelperConfig config;
 
     address ethUsdPriceFeed;
+    address wbtcUsdPriceFeed;
     address weth;
     address public USER = makeAddr("user");
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
@@ -23,9 +24,22 @@ contract DSCEngineTest is Test {
     function setUp() public {
         deployer = new DeployDSC();
         (dsc, dsce, config) = deployer.run();
-        (ethUsdPriceFeed,, weth,,) = config.activeNetworkConfig();
+        (ethUsdPriceFeed, wbtcUsdPriceFeed, weth,,) = config.activeNetworkConfig();
 
         ERC20Mock(weth).mint(USER, STARTING_ERC20_BALANCE);
+    }
+
+    //***** Constructor Test *****//
+    address[] public tokenAddresses;
+    address[] public priceFeedAddresses;
+
+    function test_Reverts_If_Token_Length_Doesnt_Match_Price_Feeds() public {
+        tokenAddresses.push(weth);
+        priceFeedAddresses.push(ethUsdPriceFeed);
+        priceFeedAddresses.push(wbtcUsdPriceFeed);
+
+        vm.expectRevert(DSCEngine.DSCEngine__TokenAddressesAndPriceFeedAddressesMustBeSameLength.selector);
+        new DSCEngine(tokenAddresses, priceFeedAddresses, address(dsc));
     }
 
     //***** Price Test *****//
@@ -38,7 +52,14 @@ contract DSCEngineTest is Test {
         assertEq(expectedUsd, actualUsd);
     }
 
-    //***** DepositCollateral Test *****//
+    function test_Get_Token_Amount_From_Usd() public {
+        uint256 usdAmount = 100 ether;
+        uint256 expectedWeth = 0.05 ether;
+        uint256 actualWeth = dsce.getTokenAmountFromUsd(weth, usdAmount);
+        assertEq(expectedWeth, actualWeth);
+    }
+
+    //***** Deposit Collateral Test *****//
 
     function test_Reverts_If_Collateral_Zero() public {
         vm.startPrank(USER);
@@ -47,5 +68,55 @@ contract DSCEngineTest is Test {
         vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
         dsce.depositCollateral(weth, 0);
         vm.stopPrank();
+    }
+
+    function test_Reverts_With_Unapproved_Collateral() public {
+        ERC20Mock ranToken = new ERC20Mock();
+        vm.startPrank(USER);
+
+        vm.expectRevert(DSCEngine.DSCEngine__NotAllowedToken.selector);
+        dsce.depositCollateral(address(ranToken), AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+
+    modifier depositedCollateral() {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+        dsce.depositCollateral(weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+        _;
+    }
+
+    function test_Can_Deposit_Collateral_And_Get_Account_Info() public depositedCollateral {
+        (uint256 totalDscMinted, uint256 collateralValueInUsd) = dsce.getAccountInformation(USER);
+        console.log("collateralValueInUsd: %s", collateralValueInUsd);
+
+        uint256 expectedTotalDscMinted = 0;
+        uint256 expectedDepositAmount = dsce.getUsdValue(weth, AMOUNT_COLLATERAL);
+        console.log("expectedDepositAmount: %s", expectedDepositAmount);
+
+        assertEq(totalDscMinted, expectedTotalDscMinted);
+        // 10000000000000000000 = 10e18
+        // 40000000000000000000000000 = 40_000e18
+        assertEq(collateralValueInUsd, expectedDepositAmount);
+    }
+
+    function test_Get_Account_Collateral_Value() public depositedCollateral {
+        uint256 collateralValueInUsd = dsce.getAccountCollateralValue(USER);
+        uint256 expectedDepositAmount = dsce.getUsdValue(weth, AMOUNT_COLLATERAL);
+        assertEq(collateralValueInUsd, expectedDepositAmount);
+    }
+
+    //***** Deposit Collateral & Mint Test *****//
+
+    function test_Deposit_Collateral_And_Mint_DSC() public depositedCollateral {
+        uint256 mintAmount = 10 ether;
+        uint256 expectedDscMinted = dsce.getTokenAmountFromUsd(address(dsc), mintAmount);
+        uint256 expectedDepositAmount = dsce.getUsdValue(weth, AMOUNT_COLLATERAL);
+        dsce.mintDsc(mintAmount);
+
+        (uint256 totalDscMinted, uint256 collateralValueInUsd) = dsce.getAccountInformation(USER);
+        assertEq(totalDscMinted, expectedDscMinted);
+        assertEq(collateralValueInUsd, expectedDepositAmount);
     }
 }
