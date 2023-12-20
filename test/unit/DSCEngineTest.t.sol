@@ -20,6 +20,7 @@ contract DSCEngineTest is Test {
     address public USER = makeAddr("user");
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
     uint256 public constant STARTING_ERC20_BALANCE = 10 ether;
+    uint256 public constant MINT_AMOUNT = 100 ether;
 
     function setUp() public {
         deployer = new DeployDSC();
@@ -109,14 +110,16 @@ contract DSCEngineTest is Test {
 
     //***** Deposit Collateral & Mint Test *****//
 
-    function test_Deposit_Collateral_And_Mint_DSC() public depositedCollateral {
-        uint256 mintAmount = 10 ether;
-        uint256 expectedDscMinted = dsce.getTokenAmountFromUsd(address(dsc), mintAmount);
-        uint256 expectedDepositAmount = dsce.getUsdValue(weth, AMOUNT_COLLATERAL);
-        dsce.mintDsc(mintAmount);
+    modifier depositedCollateralAndMintDsc() {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dsce), AMOUNT_COLLATERAL);
+        dsce.depositCollateralAndMintDsc(weth, AMOUNT_COLLATERAL, MINT_AMOUNT);
+        vm.stopPrank();
+        _;
+    }
 
-        (uint256 totalDscMinted, uint256 collateralValueInUsd) = dsce.getAccountInformation(USER);
-        assertEq(totalDscMinted, expectedDscMinted);
-        assertEq(collateralValueInUsd, expectedDepositAmount);
+    function test_Can_Mint_With_Deposit_Collateral() public depositedCollateralAndMintDsc {
+        uint256 userBalance = dsc.balanceOf(USER);
+        assertEq(userBalance, MINT_AMOUNT);
     }
 }
