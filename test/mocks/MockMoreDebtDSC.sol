@@ -6,7 +6,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {MockV3Aggregator} from "./MockV3Aggregator.sol";
 import {console} from "forge-std/Test.sol";
 
-contract MockMoreDebtDSC is ERC20, ERC20Burnable, Ownable {
+contract MockMoreDebtDSC is ERC20Burnable, Ownable {
     error DecentralizedStableCoin__AmountMustBeMoreThanZero();
     error DecentralizedStableCoin__BurnAmountExceedsBalance();
     error DecentralizedStableCoin__NotZeroAddress();
